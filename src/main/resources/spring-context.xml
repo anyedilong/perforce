@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:jdbc="http://www.springframework.org/schema/jdbc" xmlns:jee="http://www.springframework.org/schema/jee"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:util="http://www.springframework.org/schema/util"
+	xmlns:task="http://www.springframework.org/schema/task" xmlns:jpa="http://www.springframework.org/schema/data/jpa"
+	xsi:schemaLocation="
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.0.xsd
+		http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc-4.0.xsd
+		http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee-4.0.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.0.xsd
+		http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-4.0.xsd
+		http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-4.0.xsd
+		http://www.springframework.org/schema/data/jpa  
+         http://www.springframework.org/schema/data/jpa/spring-jpa.xsd"
+	default-lazy-init="true">
+
+	<description>Spring Configuration</description>
+
+	<!-- 加载配置属性文件 -->
+	<context:property-placeholder
+		ignore-unresolvable="true" location="classpath:init.properties" />
+
+	<!-- 加载应用属性实例，可通过 @Value("#{APP_PROP['jdbc.driver']}") String jdbcDriver 
+		方式引用 -->
+	<util:properties id="APP_PROP" location="classpath:init.properties"
+		local-override="true" />
+
+	<!-- 使用Annotation自动注册Bean，解决事物失效问题：在主容器中不扫描@Controller注解，在SpringMvc中只扫描@Controller注解。 -->
+	<context:component-scan base-package="org.sdblt"><!-- base-package 
+			如果多个，用“,”分隔 -->
+		<!-- <context:exclude-filter type="annotation"
+			expression="org.springframework.stereotype.Controller" /> -->
+		<context:exclude-filter type="annotation"
+            expression="org.springframework.stereotype.Controller" />
+		<!-- <context:include-filter type="annotation"
+			expression="org.springframework.stereotype.Service" />
+		<context:include-filter type="annotation"
+			expression="javax.inject.Named" />
+		<context:include-filter type="annotation"
+			expression="javax.inject.Inject" /> -->
+	</context:component-scan>
+
+
+	<!-- 配置数据源 -->
+	<bean id="dataSource" name="dataSource"
+		class="com.alibaba.druid.pool.DruidDataSource" init-method="init"
+		destroy-method="close">
+		<property name="url" value="${jdbc_url}" />
+		<property name="username" value="${jdbc_username}" />
+		<property name="password" value="${jdbc_password}" />
+		<!-- 初始化连接数量 -->
+		<property name="initialSize" value="20" />
+		<!-- 连接池最大使用连接数量 -->
+		<property name="maxActive" value="100" />
+		<!-- 连接池最大空闲 -->
+		<!-- <property name="maxIdle" value="20" /> -->
+		<!-- 连接池最小空闲 -->
+		<property name="minIdle" value="0" />
+		<!-- 获取连接最大等待时间 -->
+		<property name="maxWait" value="60000" />
+		<property name="validationQuery" value="${validationQuery}" />
+		<property name="testOnBorrow" value="false" />
+		<property name="testOnReturn" value="false" />
+		<property name="testWhileIdle" value="true" />
+		<!-- 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒 -->
+		<property name="timeBetweenEvictionRunsMillis" value="60000" />
+		<!-- 配置一个连接在池中最小生存的时间，单位是毫秒 -->
+		<property name="minEvictableIdleTimeMillis" value="300000" />
+		<!-- 超过时间限制是否回收 -->
+		<property name="removeAbandoned" value="true" />
+		<!-- 1800秒，也就是30分钟 -->
+		<property name="removeAbandonedTimeout" value="1800" />
+		<!-- 关闭abanded连接时输出错误日志 -->
+		<property name="logAbandoned" value="true" />
+		<!-- 监控数据库 -->
+		<property name="filters" value="mergeStat" />
+
+	</bean>
+
+	<!-- 缓存配置 -->
+	<bean id="cacheManagerFactory"
+		class="org.springframework.cache.ehcache.EhCacheManagerFactoryBean">
+		<property name="configLocation" value="classpath:ehcache.xml" />
+		<!--true:单例，一个cacheManager对象共享；false：多个对象独立 -->
+		<property name="shared" value="true" />
+	</bean>
+	<bean id="cacheManager" class="org.springframework.cache.ehcache.EhCacheCacheManager">
+		<property name="cacheManager" ref="cacheManagerFactory" />
+	</bean>
+
+
+	<!-- 计划任务配置，用 @Service @Lazy(false)标注类，用@Scheduled(cron = "0 0 2 * * ?")标注方法 -->
+	<task:executor id="executor" pool-size="10" />
+	<task:scheduler id="scheduler" pool-size="10" />
+	<task:annotation-driven scheduler="scheduler"
+		executor="executor" proxy-target-class="true" />
+
+
+	<!-- Entity Manager -->
+	<!-- 整合oracle jpa -->
+	<bean id="entityManagerFactory"
+		class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+		<property name="dataSource" ref="dataSource"></property>
+		<property name="packagesToScan" value="org.sdblt"></property>
+		<property name="persistenceUnitName" value="oracledb"></property>
+		<property name="jpaVendorAdapter">
+			<bean class="org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter">
+				<property name="showSql" value="true"></property>
+			</bean>
+		</property>
+		<property name="jpaProperties">
+			<props>
+				<!--设置外连接抓取树的最大深度 -->
+				<prop key="hibernate.max_fetch_depth">3</prop>
+				<prop key="hibernate.jdbc.fetch_size">18</prop>
+				<prop key="hibernate.jdbc.batch_size">10</prop>
+				<prop key="spring.jpa.open-in-view">true</prop>
+				<!-- 自动建表类型 validate|create|create-drop|update -->
+				<!-- <prop key="hibernate.hbm2ddl.auto">validate</prop> -->
+				<!-- 是否显示SQL -->
+				<prop key="hibernate.show_sql">true</prop>
+				<!-- 显示SQL是否格式化 -->
+				<prop key="hibernate.format_sql">true</prop>
+				<!-- 关闭实体字段映射校验 -->
+				<!-- <prop key="javax.persistence.validation.mode">none</prop> -->
+				<!--命名策略 -->
+				<prop key="hibernate.physical_naming_strategy">org.sdblt.common.hibernate.ImprovedNamingStrategy
+				</prop>
+				<prop key="hibernate.dialect">org.hibernate.dialect.Oracle10gDialect</prop>
+
+				<!--二级缓存 -->
+				<prop key="hibernate.cache.use_query_cache">true</prop>
+				<prop key="hibernate.cache.use_second_level_cache">true</prop>
+				<prop key="hibernate.cache.region.factory_class">org.hibernate.cache.ehcache.EhCacheRegionFactory
+				</prop>
+			</props>
+		</property>
+	</bean>
+	<!-- Transaction Manager -->
+	<bean id="transactionManager" class="org.springframework.orm.jpa.JpaTransactionManager">
+		<property name="entityManagerFactory" ref="entityManagerFactory" />
+	</bean>
+
+
+	<!-- 定义事务 -->
+	<!-- <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager"> 
+		<property name="dataSource" ref="dataSource" /> </bean> -->
+
+	<!-- 配置 Annotation 驱动，扫描@Transactional注解的类定义事务 -->
+	<tx:annotation-driven transaction-manager="transactionManager"
+		proxy-target-class="true" />
+
+
+	<!-- Jpa Repositories -->
+	<jpa:repositories base-package="org.sdblt"></jpa:repositories>
+</beans>
